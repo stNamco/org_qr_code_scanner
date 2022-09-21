@@ -10,6 +10,11 @@ import Foundation
 import UIKit
 import SwiftUI
 
+struct QRCode {
+    let rawValue: String
+    let data: NSData
+}
+
 public class QRView: NSObject, FlutterPlatformView {
     //    @IBOutlet var previewView: UIView!
     //    var scanner: MTBBarcodeScanner?
