@@ -71,8 +71,10 @@ extension ZXingViewController {
         
         self.view.layer.addSublayer(_capture.layer)
         guard let _scanView = scanView, let _resultLabel = resultLabel else { return }
-        self.view.bringSubviewToFront(_scanView)
-        self.view.bringSubviewToFront(_resultLabel)
+        // self.view.bringSubviewToFront(_scanView)
+        // self.view.bringSubviewToFront(_resultLabel)
+        self.view.bringSubview(toFront: _scanView)
+        self.view.bringSubview(toFront: _resultLabel)
     }
     
     func applyOrientation() {
