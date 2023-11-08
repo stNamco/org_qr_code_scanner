@@ -65,15 +65,6 @@ public class QRView: NSObject, FlutterPlatformView {
     
     public func view() -> UIView {
         
-        qrView
-            .found(completion: { [weak self] r in
-            print(r)
-self?.channel.invokeMethod("onRecognizeQR", arguments:
-["code": r.rawValue, "type": "QR_CODE", "rawBytes": r.data])
-        }).error(completion: { r in
-            print(r)
-        })
-        
         channel.setMethodCallHandler({
             [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
             switch(call.method){
@@ -86,6 +77,13 @@ self?.channel.invokeMethod("onRecognizeQR", arguments:
                                     scanAreaHeight: arguments["scanAreaHeight"] ?? 0,
                                     scanAreaOffset: arguments["scanAreaOffset"] ?? 0)
             case "startScan":
+                qrView.found(completion: { [weak self] r in
+                    print(r)
+        self?.channel.invokeMethod("onRecognizeQR", arguments:
+        ["code": r.rawValue, "type": "QR_CODE", "rawBytes": r.data])
+                }).error(completion: { r in
+                    print(r)
+                })
                 self?.startScan(call.arguments as! Array<Int>, result)
             case "flipCamera":
                 self?.flipCamera(result)
