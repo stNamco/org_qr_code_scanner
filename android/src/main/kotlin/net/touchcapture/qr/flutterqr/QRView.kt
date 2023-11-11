@@ -4,8 +4,12 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
-import android.hardware.Camera.CameraInfo
 import android.os.Build
+import android.os.CombinedVibration
+import android.os.VibrationEffect
+import android.os.VibrationEffect.DEFAULT_AMPLITUDE
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.google.zxing.BarcodeFormat
@@ -19,7 +23,6 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import io.flutter.plugin.platform.PlatformView
 
-
 class QRView(
     private val context: Context,
     messenger: BinaryMessenger,
@@ -27,19 +30,19 @@ class QRView(
     private val params: HashMap<String, Any>
 ) : PlatformView, MethodChannel.MethodCallHandler, PluginRegistry.RequestPermissionsResultListener {
 
-    private var isTorchOn = false
-
-    private var isPaused = false
-
-    private var barcodeView: CustomFramingRectBarcodeView? = null
+    private val cameraRequestCode = QrShared.CAMERA_REQUEST_ID + this.id
 
     private val channel: MethodChannel = MethodChannel(
         messenger, "net.touchcapture.qr.flutterqr/qrview_$id"
     )
+    private val cameraFacingBack = 0
+    private val cameraFacingFront = 1
 
+    private var isRequestingPermission = false
+    private var isTorchOn = false
+    private var isPaused = false
+    private var barcodeView: CustomFramingRectBarcodeView? = null
     private var unRegisterLifecycleCallback: UnRegisterLifecycleCallback? = null
-
-    private val cameraRequestCode = QrShared.CAMERA_REQUEST_ID + this.id
 
     init {
         QrShared.binding?.addRequestPermissionsResultListener(this)
@@ -52,7 +55,7 @@ class QRView(
 
             },
             onResume = {
-                if (!hasCameraPermission) checkAndRequestPermission()
+                if (!hasCameraPermission && !isRequestingPermission) checkAndRequestPermission()
                 else if (!isPaused && hasCameraPermission) barcodeView?.resume()
             }
         )
@@ -121,7 +124,7 @@ class QRView(
             barcodeView.decoderFactory = DefaultDecoderFactory(null, null, null, 2)
 
             if (params[PARAMS_CAMERA_FACING] as Int == 1) {
-                barcodeView.cameraSettings?.requestedCameraId = CameraInfo.CAMERA_FACING_FRONT
+                barcodeView.cameraSettings?.requestedCameraId = cameraFacingFront
             }
         } else if (!isPaused) {
             barcodeView.resume()
@@ -185,9 +188,9 @@ class QRView(
         barcodeView.pause()
 
         val settings = barcodeView.cameraSettings
-        if (settings.requestedCameraId == CameraInfo.CAMERA_FACING_FRONT) {
-            settings.requestedCameraId = CameraInfo.CAMERA_FACING_BACK
-        } else settings.requestedCameraId = CameraInfo.CAMERA_FACING_FRONT
+        if (settings.requestedCameraId == cameraFacingFront) {
+            settings.requestedCameraId = cameraFacingBack
+        } else settings.requestedCameraId = cameraFacingFront
 
         barcodeView.resume()
 
@@ -233,6 +236,12 @@ class QRView(
 
         val allowedBarcodeTypes = getAllowedBarcodeTypes(arguments, result)
 
+        if (arguments == null) {
+            barcodeView?.decoderFactory = DefaultDecoderFactory(null, null, null, 2)
+        } else {
+            barcodeView?.decoderFactory = DefaultDecoderFactory(allowedBarcodeTypes, null, null, 2)
+        }
+
         barcodeView?.decodeContinuous(
             object : BarcodeCallback {
                 override fun barcodeResult(result: BarcodeResult) {
@@ -242,6 +251,8 @@ class QRView(
                             "type" to result.barcodeFormat.name,
                             "rawBytes" to result.rawBytes
                         )
+
+                        vibrate()
 
                         channel.invokeMethod(CHANNEL_METHOD_ON_RECOGNIZE_QR, code)
                     }
@@ -305,6 +316,7 @@ class QRView(
         grantResults: IntArray
     ): Boolean {
         if (requestCode != cameraRequestCode) return false
+        isRequestingPermission = false
 
         val permissionGranted =
             grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
@@ -314,13 +326,15 @@ class QRView(
         return permissionGranted
     }
 
+
+
     private fun checkAndRequestPermission() {
         if (hasCameraPermission) {
             channel.invokeMethod(CHANNEL_METHOD_ON_PERMISSION_SET, true)
             return
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isRequestingPermission) {
             QrShared.activity?.requestPermissions(
                 arrayOf(Manifest.permission.CAMERA),
                 cameraRequestCode
@@ -374,6 +388,19 @@ class QRView(
 
         private const val ERROR_MESSAGE_NOT_SET = "No barcode view found"
         private const val ERROR_MESSAGE_FLASH_NOT_FOUND = "This device doesn't support flash"
+    }
+
+    private fun vibrate() {
+        // VibratorManager is only available on Android 12(31) or later
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val vibrationEffect = VibrationEffect.createOneShot(200, DEFAULT_AMPLITUDE)
+            vibratorManager.vibrate(CombinedVibration.createParallel(vibrationEffect))
+        } else {
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            val vibrationEffect = VibrationEffect.createOneShot(200, DEFAULT_AMPLITUDE)
+            vibrator.vibrate(vibrationEffect)
+        }
     }
 }
 
