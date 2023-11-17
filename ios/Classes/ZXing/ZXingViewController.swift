@@ -220,6 +220,8 @@ extension ZXingViewController: ZXCaptureDelegate {
         isScanning = true
     }
     
+    
+    
     func captureResult(_ capture: ZXCapture?, result: ZXResult?) {
         guard let _result = result, isScanning == true else { return }
 
